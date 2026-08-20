@@ -1,0 +1,573 @@
+ADR-003用のデータ再処理パイプラインを設計してください。
+
+目的は
+
+「Helical scanにおいてchunk品質の空間的不均一性が存在するか」
+
+および
+
+「高品質chunkを選別することでfull helical datasetを上回れるか」
+
+を評価することです。
+
+ADR-001で使用したパイプラインを可能な限り踏襲してください。
+
+==================================================
+基本方針
+==================================================
+
+ADR-001との比較可能性を維持するため、
+
+- XDS
+- AIMLESS
+- POINTLESS
+- ADR-001と同一の品質指標
+
+を利用する。
+
+解析は
+
+1. Full Dataset Processing
+2. Chunk Processing
+3. Chunk Quality Mapping
+4. Chunk Selection Test
+
+の4段階で実施する。
+
+==================================================
+Phase 1
+Full Dataset Processing
+==================================================
+
+全helical datasetについて
+
+ADR-001と同じ条件で
+
+XDS
+↓
+POINTLESS
+↓
+AIMLESS
+
+を実行する。
+
+出力:
+
+- GXPARM.XDS
+- CORRECT.LP
+- AIMLESS log
+- merged.mtz
+- XML
+
+抽出項目:
+
+- dmin
+- outer-shell CC1/2
+- outer-shell Mn(I/sd)
+- ISa
+- Rpim
+- multiplicity
+- completeness
+- mosaicity
+- Wilson B (取得可能なら)
+
+CSV化する。
+
+==================================================
+Phase 2
+Chunk Generation
+==================================================
+
+ADR-001と同じchunk生成法を使う。
+
+候補:
+
+- 5°
+- 10°
+- 20°
+
+chunk
+
+例
+
+200°
+
+↓
+
+40 chunks (5°)
+
+20 chunks (10°)
+
+10 chunks (20°)
+
+各chunkは
+
+独立XDS処理
+
+を実施する。
+
+reference indexing はまだ使わない。
+
+まずは純粋な品質評価を行う。
+
+出力:
+
+chunk単位で
+
+- XDS結果
+- AIMLESS結果
+- merged mtz
+
+==================================================
+Phase 3
+Chunk Quality Mapping
+==================================================
+
+ADR-003の主解析。
+
+各chunkについて
+
+取得項目:
+
+- dmin
+- outer-shell CC1/2
+- outer-shell Mn(I/sd)
+- ISa
+- Rpim
+- multiplicity
+- completeness
+- mosaicity
+
+を整理する。
+
+==================================================
+出力1
+Chunk Quality Table
+==================================================
+
+rows:
+
+dataset × chunk
+
+columns:
+
+- chunk id
+- start angle
+- end angle
+- dmin
+- CC1/2
+- Mn(I/sd)
+- ISa
+- Rpim
+- completeness
+- mosaicity
+
+==================================================
+出力2
+Chunk Quality Heatmap
+==================================================
+
+datasetごとに
+
+angle vs metric
+
+heatmapを作成。
+
+対象:
+
+- dmin
+- CC1/2
+- Mn(I/sd)
+- ISa
+
+==================================================
+出力3
+Chunk Quality Distribution
+==================================================
+
+確認したいこと:
+
+chunk品質は
+
+- 一様か
+- ランダムか
+- 特定領域に偏るか
+
+==================================================
+Phase 4
+Chunk Selection Test
+==================================================
+
+Phase 3終了後に実施。
+
+重要:
+
+この段階で初めて
+選別指標を決める。
+
+現時点では決め打ちしない。
+
+候補:
+
+- dmin
+- outer-shell CC1/2
+- Mn(I/sd)
+- ISa
+- composite score
+
+==================================================
+比較対象
+==================================================
+
+A
+
+Full Helical Dataset
+
+B
+
+Best Chunk Group
+
+C
+
+Worst Chunk Group
+
+D
+
+Selected Chunk Reconstruction
+
+==================================================
+評価項目
+==================================================
+
+- dmin
+- outer-shell CC1/2
+- outer-shell Mn(I/sd)
+- ISa
+- Rpim
+- completeness
+- multiplicity
+
+==================================================
+ADR-001との比較
+==================================================
+
+同一図を作成する。
+
+比較対象:
+
+ADR-001
+(fixed-point)
+
+ADR-003
+(helical)
+
+確認したい問い:
+
+1.
+chunk品質分布は異なるか
+
+2.
+fixed-pointでは見られなかった
+品質不均一性が存在するか
+
+3.
+chunk選別が意味を持つか
+
+==================================================
+重要
+==================================================
+
+今回は
+
+Radiation Damage解析
+
+を主目的としない。
+
+また
+
+pairwise CC選別
+
+も主目的としない。
+
+まずは
+
+Helical Scanにおける
+Chunk Quality Mapping
+
+を実施すること。
+
+解析結果から
+
+chunkの品質差が存在するか
+
+を客観的に評価する。
+
+その後に
+
+Chunk Selection Test
+
+を実施する。
+
+==================================================
+最終出力
+==================================================
+
+reports/ADR003_chunk_quality_mapping.md
+
+reports/ADR003_summary.csv
+
+reports/ADR003_chunk_metrics.csv
+
+reports/figures/
+
+- chunk_heatmap_dmin.png
+- chunk_heatmap_CC12.png
+- chunk_heatmap_ISa.png
+- chunk_distribution.png
+- full_vs_chunk_comparison.png
+
+を作成してください。
+`
+## Execution Constraints
+
+This analysis will be started on Friday evening.
+
+External network connectivity will be unavailable from:
+
+**Saturday 04:00**
+
+until
+
+**Monday 13:00**
+
+Local LAN and local storage will remain available.
+
+Therefore the entire workflow must be capable of running autonomously without any dependency on external network resources.
+
+---
+
+## Requirement 1: Offline Execution
+
+The pipeline must not require:
+
+- Internet access
+- Package downloads
+- Remote API calls
+- Cloud services
+- Git pull or repository updates
+- External databases
+
+after job launch.
+
+All required files, scripts, binaries and configuration files must be validated before launch.
+
+The complete workflow must survive the network outage period without human intervention.
+
+---
+
+## Requirement 2: Memory Safety First
+
+The highest priority is avoiding system shutdown caused by memory exhaustion.
+
+Under no circumstances should total RAM usage exceed:
+
+**100 GB**
+
+Prefer:
+
+- lower parallelism
+- slower throughput
+- sequential execution
+- batched processing
+
+rather than aggressive parallel execution.
+
+Analysis efficiency is secondary.
+
+Completion by Monday afternoon is sufficient.
+
+---
+
+## Requirement 3: Staged Processing
+
+Design the workflow as independent restartable stages.
+
+Example:
+
+### Stage 1
+
+Full dataset processing
+
+### Stage 2
+
+Chunk generation
+
+### Stage 3
+
+Chunk processing
+
+### Stage 4
+
+Metric extraction
+
+### Stage 5
+
+Chunk quality mapping
+
+### Stage 6
+
+Chunk selection tests
+
+Each stage must write results to disk.
+
+Each stage must be restartable without repeating previous stages.
+
+Avoid monolithic execution.
+
+---
+
+## Requirement 4: Checkpointing
+
+After completion of every dataset or chunk:
+
+- save outputs
+- update status file
+- update summary CSV
+- update progress log
+
+If the workflow stops unexpectedly,
+
+restarting should continue from the latest completed chunk.
+
+Completed jobs must never be recomputed if valid outputs already exist.
+
+---
+
+## Requirement 5: Concurrency Control
+
+Estimate RAM requirements for:
+
+- XDS
+- POINTLESS
+- AIMLESS
+
+Determine a conservative maximum concurrency.
+
+Target:
+
+- expected RAM < 80 GB
+- worst-case RAM < 100 GB
+
+If uncertain, reduce parallelism.
+
+Memory safety has higher priority than runtime.
+
+---
+
+## Requirement 6: Chunk Explosion Protection
+
+ADR-001 showed that chunk counts can become very large.
+
+Before launching:
+
+Calculate:
+
+- total number of full jobs
+- total number of 20° chunk jobs
+- total number of 10° chunk jobs
+- total number of 5° chunk jobs
+- estimated runtime
+- estimated RAM
+- estimated storage
+
+Process chunk sizes sequentially:
+
+1. 20°
+2. 10°
+3. 5°
+
+Do not execute all chunk sizes simultaneously.
+
+The purpose is to guarantee completion before Monday afternoon.
+
+---
+
+## Requirement 7: Disk Usage Control
+
+Retain only files required for ADR-003 analyses.
+
+Keep:
+
+- merged MTZ
+- AIMLESS logs
+- XML
+- CORRECT.LP
+- GXPARM.XDS
+- summary CSV
+
+Optionally compress or remove:
+
+- temporary integration outputs
+- redundant intermediate files
+
+Provide an estimated disk footprint before execution.
+
+---
+
+## Requirement 8: Progress Tracking
+
+Generate an automatically updated status report.
+
+Required fields:
+
+- completed datasets
+- completed chunks
+- failed chunks
+- pending chunks
+- current stage
+- elapsed time
+
+The objective is to allow Monday afternoon review without manual log parsing.
+
+---
+
+## Requirement 9: ADR-001 Compatibility
+
+Use ADR-001 processing design whenever possible.
+
+Maintain:
+
+- identical quality metrics
+- identical reporting style
+- identical CSV structure
+
+This is required to allow direct comparison between ADR-001 and ADR-003.
+
+---
+
+## Pre-execution Report
+
+Before launching the workflow, generate:
+
+1. Total chunk counts
+2. RAM estimate
+3. Disk estimate
+4. Runtime estimate
+5. Safe concurrency level
+6. Failure recovery strategy
+7. Complete execution schedule
+
+---
+
+## Priority Order
+
+1. Prevent memory exhaustion
+2. Ensure autonomous execution through the network outage
+3. Preserve restartability
+4. Complete processing by Monday afternoon
+5. Maximize processing efficiency
+
+Speed is less important than robustness.
+
+The system should favor conservative resource usage over throughput.
+``
